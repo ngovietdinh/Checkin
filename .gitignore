@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+supabase/.branches
+supabase/.temp
+supabase/functions/.env
+*.log
+.DS_Store
+test-results
+supabase/functions/.ca-test.pem
