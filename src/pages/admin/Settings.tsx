@@ -49,6 +49,7 @@ export default function Settings() {
         <Field label="Được check-in sớm trước ca (phút)"><Input type="number" value={s.attendance.checkin_open_before_min} onChange={(e) => up("attendance", { checkin_open_before_min: Number(e.target.value) })} /></Field>
         <Field label="Coi là quên check-out sau khi hết ca (giờ)"><Input type="number" value={s.attendance.missing_checkout_after_hours} onChange={(e) => up("attendance", { missing_checkout_after_hours: Number(e.target.value) })} /></Field>
         <Field label="Tốc độ di chuyển bất thường (km/h)" hint="Vị trí giữa 2 lần chấm nhảy nhanh hơn mức này sẽ bị đánh dấu"><Input type="number" value={s.attendance.max_travel_speed_kmh} onChange={(e) => up("attendance", { max_travel_speed_kmh: Number(e.target.value) })} /></Field>
+        <Field label="Lưu ảnh selfie (ngày)" hint="Ảnh cũ hơn sẽ tự xoá lúc 2h sáng để tiết kiệm dung lượng. 0 = giữ mãi"><Input type="number" min={0} value={s.attendance.selfie_retention_days ?? 0} onChange={(e) => up("attendance", { selfie_retention_days: Number(e.target.value) })} /></Field>
         <div className="space-y-3 sm:col-span-2">
           <Toggle checked={s.attendance.require_selfie_checkin} onChange={(v) => up("attendance", { require_selfie_checkin: v })} label="Bắt buộc chụp selfie khi check-in" />
           <Toggle checked={s.attendance.require_selfie_checkout} onChange={(v) => up("attendance", { require_selfie_checkout: v })} label="Bắt buộc chụp selfie khi check-out" />

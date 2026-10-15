@@ -2,6 +2,7 @@
 -- TÁC VỤ ĐỊNH KỲ (pg_cron) – có sẵn trên Supabase Cloud và Supabase tự host
 --  * Mỗi 5 phút: sinh nhắc nhở (vào ca, ra ca, vắng mặt, quên check-out, hạn việc)
 --  * Mỗi phút: gọi Edge Function "push-dispatch" để gửi Web Push / Telegram / Email
+--  * 02:00 hằng ngày: Edge Function "cleanup" xoá ảnh selfie quá hạn lưu trữ
 --
 -- Sau khi deploy, chạy 1 lần (thay giá trị thật):
 --   select app.set_config('functions_url', 'https://<project>.supabase.co/functions/v1');
@@ -47,11 +48,30 @@ begin
   );
 end $$;
 revoke execute on function app.dispatch_push from public, anon, authenticated;
+
+create or replace function app.call_function(p_name text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_url text := app.get_config('functions_url');
+  v_secret text := app.get_config('cron_secret');
+begin
+  if v_url is null or v_secret is null then return; end if;
+  perform net.http_post(
+    url := v_url || '/' || p_name,
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', v_secret),
+    body := '{}'::jsonb
+  );
+end $$;
+revoke execute on function app.call_function from public, anon, authenticated;
+
+-- mặc định giữ ảnh selfie 180 ngày (0 = giữ mãi)
+update public.settings set data = jsonb_set(data, '{attendance,selfie_retention_days}', '180') where id = 1;
 revoke execute on function app.generate_reminders from public, anon, authenticated;
 
 do $$
 begin
-  perform cron.unschedule(jobid) from cron.job where jobname in ('chamcong-reminders', 'chamcong-push');
+  perform cron.unschedule(jobid) from cron.job where jobname in ('chamcong-reminders', 'chamcong-push', 'chamcong-cleanup');
   perform cron.schedule('chamcong-reminders', '*/5 * * * *', 'select app.generate_reminders()');
   perform cron.schedule('chamcong-push', '* * * * *', 'select app.dispatch_push()');
+  perform cron.schedule('chamcong-cleanup', '0 19 * * *', $c$select app.call_function('cleanup')$c$); -- 02:00 giờ VN
 end $$;

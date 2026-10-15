@@ -269,6 +269,18 @@ const denied = await fetch(SUPABASE_URL + "/functions/v1/push-dispatch", { metho
 ok(denied.status === 401, "push-dispatch từ chối khi không có secret");
 
 // ---------------------------------------------------------------------------
+console.log("\n[9b] Dọn ảnh selfie quá hạn");
+await admin.storage.from("selfies").upload(`${empId}/2020-01-01/old.jpg`, jpg, { contentType: "image/jpeg" });
+const { data: st0 } = await admin.from("settings").select("data").eq("id", 1).single();
+await admin.from("settings").update({ data: { ...st0.data, attendance: { ...st0.data.attendance, selfie_retention_days: 30 } } }).eq("id", 1);
+const cl = await fetch(SUPABASE_URL + "/functions/v1/cleanup", { method: "POST", headers: { "x-cron-secret": "test-cron-secret" } });
+const cj = await cl.json().catch(() => ({}));
+ok(cl.status === 200 && cj.removed >= 1, "xoá ảnh cũ hơn 30 ngày", cj);
+const { data: keep } = await admin.storage.from("selfies").list(`${empId}/${today()}`);
+ok(keep?.length >= 1, "giữ ảnh mới");
+await admin.from("settings").update({ data: st0.data }).eq("id", 1);
+
+// ---------------------------------------------------------------------------
 console.log("\n[10] Khoá tài khoản nghỉ việc");
 const lock = await adm.functions.invoke("admin-users", { body: { action: "set_active", id: emp2Id, active: false } });
 ok(lock.data?.ok, "khoá tài khoản", lock.error);

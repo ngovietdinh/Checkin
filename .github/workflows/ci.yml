@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Kiểu, unit test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  backend:
+    name: Test tích hợp Supabase
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Khởi động Supabase cục bộ
+        run: npx supabase start -x studio,imgproxy,vector,logflare,supavisor,mailpit
+      - name: Cấu hình kết nối
+        run: |
+          npx supabase status -o env > /tmp/sb.env
+          source /tmp/sb.env
+          {
+            echo "VITE_SUPABASE_URL=$API_URL"
+            echo "VITE_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } > .env.local
+          npx -y web-push@3.6.7 generate-vapid-keys --json \
+            | node -e "const k=JSON.parse(require('fs').readFileSync(0));console.log('VAPID_PUBLIC_KEY='+k.publicKey+'\nVAPID_PRIVATE_KEY='+k.privateKey)" \
+            > supabase/functions/.env
+          echo "CRON_SECRET=test-cron-secret" >> supabase/functions/.env
+          echo "LOGIN_EMAIL_DOMAIN=nv.local" >> supabase/functions/.env
+      - name: Chạy Edge Functions
+        run: |
+          nohup npx supabase functions serve --env-file supabase/functions/.env > /tmp/functions.log 2>&1 &
+          sleep 15
+      - name: Test backend
+        run: npm run test:db
+      - name: Log Edge Functions khi lỗi
+        if: failure()
+        run: tail -100 /tmp/functions.log

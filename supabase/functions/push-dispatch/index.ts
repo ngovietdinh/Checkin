@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
         } catch (e) {
           const code = (e as { statusCode?: number }).statusCode;
           if (code === 404 || code === 410) dead.push(s.id);
+          else console.error("web push lỗi", code ?? "", (e as Error).message);
         }
       }
     }

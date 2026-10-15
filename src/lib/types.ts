@@ -334,6 +334,7 @@ export interface AppSettings {
     missing_checkout_after_hours: number;
     notify_manager_on_late: boolean;
     max_travel_speed_kmh: number;
+    selfie_retention_days?: number;
   };
   reminders: { checkin_before_min: number; checkout_after_min: number; absent_after_min: number; task_due_hours: number };
   leave: { annual_quota_default: number; accrue_monthly: boolean; seniority_bonus_every_years: number };

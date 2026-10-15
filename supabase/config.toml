@@ -417,3 +417,6 @@ enabled = true
 # Gọi bởi pg_cron, xác thực bằng header x-cron-secret
 [functions.push-dispatch]
 verify_jwt = false
+
+[functions.cleanup]
+verify_jwt = false
