@@ -149,45 +149,54 @@ npm test          # 19 unit test bộ tính công/lương
 npm run test:db   # 83 test tích hợp backend: GPS, selfie, thiết bị, RLS, duyệt đơn, kỳ lương, nhắc nhở…
 ```
 
-## Triển khai lên Supabase Cloud
+## Triển khai: Supabase + Vercel (không cần cài gì trên máy)
 
-1. **Tạo project** tại <https://supabase.com>, chọn region **Singapore** cho gần Việt Nam.
-2. **Đẩy database:**
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref <REF>
-   npx supabase db push
-   ```
-3. **Cấu hình đăng nhập.** Vào Dashboard → Authentication → Sign In / Providers:
-   - Tắt **Allow new users to sign up**. Tài khoản do HR tạo.
+### Bước 1 – Tạo project Supabase
+1. Vào <https://supabase.com> → **New project**. Đặt tên, **ghi lại mật khẩu database**, chọn region **Southeast Asia (Singapore)**.
+2. Vào **Authentication → Sign In / Providers**:
+   - Tắt **Allow new users to sign up**.
    - Giữ **Email** bật.
    - Tắt **Confirm email**.
-4. **Khoá bí mật cho Edge Functions:**
-   ```bash
-   npx web-push generate-vapid-keys    # sinh cặp khoá thông báo đẩy
-   npx supabase secrets set \
-     CRON_SECRET="$(openssl rand -hex 24)" \
-     LOGIN_EMAIL_DOMAIN=nv.local \
-     APP_URL=https://chamcong.congty.vn \
-     VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:admin@congty.vn
-   # tuỳ chọn: TELEGRAM_BOT_TOKEN=... RESEND_API_KEY=... EMAIL_FROM="Chấm công <noreply@congty.vn>"
-   npx supabase functions deploy
-   ```
-5. **Bật tác vụ định kỳ.** Chạy trong SQL Editor, dùng đúng `CRON_SECRET` ở bước 4:
-   ```sql
-   select app.set_config('functions_url', 'https://<REF>.supabase.co/functions/v1');
-   select app.set_config('cron_secret', '<CRON_SECRET>');
-   ```
-6. **Tạo tài khoản Admin đầu tiên.** Lấy service_role key ở Dashboard → Project Settings → API Keys:
-   ```bash
-   SUPABASE_URL=https://<REF>.supabase.co SUPABASE_SERVICE_ROLE_KEY=<service_role> \
-     npm run create-admin -- --code ADMIN --name "Tên của bạn" --password "MatKhauManh@2026"
-   ```
-7. **Đưa ứng dụng lên mạng.** Bắt buộc dùng **HTTPS**, vì điện thoại chỉ cho dùng GPS và camera trên HTTPS.
-   ```bash
-   npm run build
-   ```
-   Sửa `dist/config.js` với `supabaseUrl`, `supabaseAnonKey` (anon/publishable key), `vapidPublicKey`. Sau đó tải thư mục `dist/` lên một dịch vụ host tĩnh bất kỳ: Cloudflare Pages, Netlify, Vercel, hoặc web server của công ty.
+3. Ghi lại các giá trị sau:
+   - **Project ref**: đoạn `xxxx` trong `https://xxxx.supabase.co`.
+   - **Publishable/anon key**: ở **Project Settings → API Keys**.
+   - **Access token**: tạo tại <https://supabase.com/dashboard/account/tokens>.
+
+### Bước 2 – Khai báo bí mật trên GitHub
+Vào repo → **Settings → Secrets and variables → Actions → New repository secret** và thêm:
+
+| Tên | Giá trị |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | access token ở bước 1 |
+| `SUPABASE_PROJECT_REF` | project ref |
+| `SUPABASE_DB_PASSWORD` | mật khẩu database |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | cặp khoá thông báo đẩy (`npx web-push generate-vapid-keys`) |
+| `CRON_SECRET` | chuỗi ngẫu nhiên dài bất kỳ |
+| `ADMIN_PASSWORD` | mật khẩu ban đầu cho tài khoản `ADMIN` |
+| `APP_URL` | địa chỉ app trên Vercel (thêm sau bước 4 cũng được) |
+
+### Bước 3 – Triển khai backend
+Vào **Actions → Triển khai Supabase → Run workflow**. Workflow tự làm các việc sau:
+- tạo database (bảng, phân quyền, hàm),
+- cài khoá bí mật và 3 Edge Functions,
+- bật tác vụ định kỳ,
+- tạo tài khoản `ADMIN`.
+
+Khi cập nhật code về sau, chỉ cần chạy lại workflow này.
+
+### Bước 4 – Đưa app lên Vercel
+1. Vào <https://vercel.com> → **Add New → Project** → Import repo `Checkin`. Vercel tự nhận cấu hình Vite từ `vercel.json`.
+2. Ở **Environment Variables**, thêm:
+   - `VITE_SUPABASE_URL` = `https://<REF>.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY` = publishable/anon key
+   - `VITE_VAPID_PUBLIC_KEY` = khoá VAPID public
+3. Bấm **Deploy**. Vercel cấp sẵn HTTPS, đây là điều kiện bắt buộc để điện thoại cho dùng GPS và camera.
+4. Lấy địa chỉ app (ví dụ `https://checkin-xxx.vercel.app`):
+   - Đặt vào secret `APP_URL` rồi chạy lại workflow ở bước 3, để đường link trong thông báo trỏ đúng app.
+   - Ở Supabase → **Authentication → URL Configuration**, đặt **Site URL** bằng địa chỉ này.
+5. Đăng nhập app bằng mã `ADMIN` và mật khẩu `ADMIN_PASSWORD`.
+
+> **Muốn tự chạy bằng dòng lệnh thay cho bước 3**, dùng các lệnh `npx supabase link`, `npx supabase db push`, `npx supabase secrets set …`, `npx supabase functions deploy`, rồi tạo tài khoản quản trị bằng `npm run create-admin`. Xem chi tiết trong file `.github/workflows/deploy-supabase.yml`.
 
 ### Cài app lên điện thoại
 

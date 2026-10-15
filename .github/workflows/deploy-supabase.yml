@@ -1,0 +1,101 @@
+# Triển khai backend lên Supabase Cloud: database, Edge Functions, khoá bí mật, tác vụ định kỳ, tài khoản Admin.
+# Chạy tay: GitHub → Actions → "Triển khai Supabase" → Run workflow. Chạy lại bao nhiêu lần cũng được.
+#
+# Cần khai báo ở Settings → Secrets and variables → Actions → New repository secret:
+#   SUPABASE_ACCESS_TOKEN   https://supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_REF    mã project (đoạn xxxx trong https://xxxx.supabase.co)
+#   SUPABASE_DB_PASSWORD    mật khẩu database đặt lúc tạo project
+#   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY   cặp khoá thông báo đẩy
+#   CRON_SECRET             chuỗi ngẫu nhiên dài bất kỳ
+#   ADMIN_PASSWORD          mật khẩu ban đầu của tài khoản ADMIN
+#   APP_URL                 địa chỉ app trên Vercel, vd https://chamcong.vercel.app
+#   (tuỳ chọn) TELEGRAM_BOT_TOKEN, RESEND_API_KEY, EMAIL_FROM
+name: Triển khai Supabase
+
+on:
+  workflow_dispatch:
+    inputs:
+      admin_name:
+        description: "Họ tên tài khoản quản trị (mã đăng nhập: ADMIN)"
+        default: "Quản trị hệ thống"
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Kiểm tra khai báo
+        run: |
+          for v in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD PROJECT_REF; do
+            [ -n "${!v}" ] || { echo "::error::Thiếu secret $v"; exit 1; }
+          done
+
+      - name: Kết nối project
+        run: npx supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Tạo / cập nhật database
+        run: npx supabase db push --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Khoá bí mật cho Edge Functions
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          APP_URL: ${{ secrets.APP_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        run: |
+          {
+            echo "CRON_SECRET=$CRON_SECRET"
+            echo "LOGIN_EMAIL_DOMAIN=nv.local"
+            echo "VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY"
+            echo "VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY"
+            echo "VAPID_SUBJECT=mailto:admin@example.com"
+            [ -n "$APP_URL" ] && echo "APP_URL=$APP_URL"
+            [ -n "$TELEGRAM_BOT_TOKEN" ] && echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN"
+            [ -n "$RESEND_API_KEY" ] && echo "RESEND_API_KEY=$RESEND_API_KEY"
+            [ -n "$EMAIL_FROM" ] && echo "EMAIL_FROM=$EMAIL_FROM"
+            true
+          } > /tmp/fn.env
+          npx supabase secrets set --project-ref "$PROJECT_REF" --env-file /tmp/fn.env
+          rm /tmp/fn.env
+
+      - name: Triển khai Edge Functions
+        run: npx supabase functions deploy --project-ref "$PROJECT_REF"
+
+      - name: Lấy khoá service_role
+        run: |
+          KEY=$(npx supabase projects api-keys --project-ref "$PROJECT_REF" --reveal -o json \
+            | node -e "const a=JSON.parse(require('fs').readFileSync(0,'utf8'));const k=a.find(x=>x.name==='service_role')||a.find(x=>/secret/i.test(x.type||x.name||''));if(!k)process.exit(1);process.stdout.write(k.api_key)")
+          echo "::add-mask::$KEY"
+          echo "SERVICE_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Bật tác vụ định kỳ (nhắc nhở, gửi thông báo, dọn ảnh)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS -X POST "https://$PROJECT_REF.supabase.co/rest/v1/rpc/setup_cron" \
+            -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" -H "Content-Type: application/json" \
+            -d "{\"p_functions_url\":\"https://$PROJECT_REF.supabase.co/functions/v1\",\"p_cron_secret\":\"$CRON_SECRET\"}"
+          echo "Đã cấu hình cron"
+
+      - name: Tạo tài khoản ADMIN (bỏ qua nếu đã có)
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_NAME: ${{ inputs.admin_name }}
+        run: |
+          [ -n "$ADMIN_PASSWORD" ] || { echo "Chưa đặt secret ADMIN_PASSWORD – bỏ qua"; exit 0; }
+          SUPABASE_URL="https://$PROJECT_REF.supabase.co" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_KEY" \
+            node scripts/create-admin.mjs --code ADMIN --name "$ADMIN_NAME" --password "$ADMIN_PASSWORD"

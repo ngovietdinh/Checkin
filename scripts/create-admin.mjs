@@ -12,6 +12,11 @@ if (!password || password.length < 8) {
 }
 
 const db = adminClient();
+const { data: existing } = await db.from("employees").select("id").eq("code", code).maybeSingle();
+if (existing) {
+  console.log(`Tài khoản ${code} đã tồn tại – bỏ qua.`);
+  process.exit(0);
+}
 const login = loginEmail(code, email);
 const { data, error } = await db.auth.admin.createUser({ email: login, password, email_confirm: true });
 if (error) { console.error("Lỗi tạo tài khoản:", error.message); process.exit(1); }
