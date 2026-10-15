@@ -3,18 +3,15 @@
 // Ảnh nằm theo đường dẫn selfies/{user_id}/{YYYY-MM-DD}/...
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { corsHeaders, json } from "../_shared/cors.ts";
+import { isCronRequest } from "../_shared/cron-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const CRON_SECRET = Deno.env.get("CRON_SECRET");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  const auth = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
-  if (!(CRON_SECRET && req.headers.get("x-cron-secret") === CRON_SECRET) && auth !== SERVICE_KEY) {
-    return json({ error: "unauthorized" }, 401);
-  }
   const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  if (!(await isCronRequest(req, db, SERVICE_KEY))) return json({ error: "unauthorized" }, 401);
   const { data: s } = await db.from("settings").select("data").eq("id", 1).single();
   const days = Number(s?.data?.attendance?.selfie_retention_days ?? 0);
   if (!days) return json({ skipped: "selfie_retention_days = 0" });

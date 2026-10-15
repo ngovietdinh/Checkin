@@ -3,10 +3,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import webpush from "npm:web-push@3.6.7";
 import { corsHeaders, json } from "../_shared/cors.ts";
+import { isCronRequest } from "../_shared/cron-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const CRON_SECRET = Deno.env.get("CRON_SECRET");
 const VAPID_PUBLIC = Deno.env.get("VAPID_PUBLIC_KEY");
 const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE_KEY");
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com";
@@ -24,12 +24,9 @@ interface Notif { id: string; user_id: string; type: string; title: string; body
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  const auth = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
-  if (!(CRON_SECRET && req.headers.get("x-cron-secret") === CRON_SECRET) && auth !== SERVICE_KEY) {
-    return json({ error: "unauthorized" }, 401);
-  }
 
   const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  if (!(await isCronRequest(req, db, SERVICE_KEY))) return json({ error: "unauthorized" }, 401);
   const since = new Date(Date.now() - 3600_000).toISOString();
 
   const { data: pending, error } = await db.from("notifications")
