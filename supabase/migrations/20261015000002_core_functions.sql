@@ -305,9 +305,9 @@ declare
   v_km float8;
   v_max_speed float8 := coalesce((app.cfg('attendance', 'max_travel_speed_kmh'))::text::float8, 150);
 begin
-  if coalesce((p_meta->>'mocked')::boolean, false) then v_flags := v_flags || 'mock_location'; end if;
-  if p_accuracy is not null and p_accuracy < 1 then v_flags := v_flags || 'gps_too_precise'; end if;
-  if (p_meta->>'position_age_ms')::float8 > 60000 then v_flags := v_flags || 'stale_position'; end if;
+  if coalesce((p_meta->>'mocked')::boolean, false) then v_flags := array_append(v_flags, 'mock_location'); end if;
+  if p_accuracy is not null and p_accuracy < 1 then v_flags := array_append(v_flags, 'gps_too_precise'); end if;
+  if (p_meta->>'position_age_ms')::float8 > 60000 then v_flags := array_append(v_flags, 'stale_position'); end if;
 
   -- vị trí "nhảy" bất thường so với lần chấm gần nhất
   select ts, lat, lng into v_last from (
@@ -320,7 +320,7 @@ begin
   if v_last.ts is not null then
     v_hours := greatest(extract(epoch from now() - v_last.ts) / 3600, 1.0 / 60);
     v_km := app.distance_m(p_lat, p_lng, v_last.lat, v_last.lng) / 1000;
-    if v_km > 1 and v_km / v_hours > v_max_speed then v_flags := v_flags || 'impossible_travel'; end if;
+    if v_km > 1 and v_km / v_hours > v_max_speed then v_flags := array_append(v_flags, 'impossible_travel'); end if;
   end if;
   return v_flags;
 end $$;
@@ -392,10 +392,10 @@ begin
     if not coalesce((v_cfg->>'allow_unscheduled_checkin')::boolean, true) then
       perform app.raise_err('NO_SHIFT');
     end if;
-    v_flags := v_flags || 'unscheduled';
+    v_flags := array_append(v_flags, 'unscheduled');
     v_best_date := v_today;
   elsif v_best_branch is not null and v_best_branch <> v_loc.branch_id then
-    v_flags := v_flags || 'other_branch';
+    v_flags := array_append(v_flags, 'other_branch');
   end if;
 
   insert into attendance (employee_id, work_date, shift_id, branch_id, check_in_at,

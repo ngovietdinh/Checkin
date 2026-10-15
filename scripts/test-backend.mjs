@@ -117,6 +117,22 @@ ok(co.data?.early_minutes > 300, "tính về sớm", co.data?.early_minutes);
 await expectErr(emp.rpc("check_out", { ...near, p_device_id: DEV }), "NOT_CHECKED_IN", "không check-out khi chưa check-in");
 
 // ---------------------------------------------------------------------------
+console.log("\n[3b] Chấm ngoài lịch & cờ nghi vấn");
+const { data: br2 } = await admin.from("branches").insert({ name: "CN xa " + sfx, lat: 21.0245, lng: 105.8531, radius_m: 100 }).select().single();
+const flxId = await createEmp("FLX" + sfx, "employee", { default_shift_id: null, branch_ids: [br.id, br2.id], manager_id: mgrId });
+const flx = await signIn("FLX" + sfx);
+const fsel = `${flxId}/f-${Date.now()}.jpg`;
+await flx.storage.from("selfies").upload(fsel, jpg, { contentType: "image/jpeg" });
+const fci = await flx.rpc("check_in", { ...near, p_selfie: fsel, p_device_id: "dev-flx-" + sfx + "-xxxxxxxx", p_meta: { mocked: true } });
+ok(!fci.error && fci.data.shift_id === null, "check-in ngoài lịch ca được phép", fci.error);
+ok(fci.data?.flags?.includes("unscheduled") && fci.data.flags.includes("mock_location"), "gắn cờ ngoài lịch + giả lập vị trí", fci.data?.flags);
+const fco = await flx.rpc("check_out", { p_lat: 21.0246, p_lng: 105.8532, p_accuracy: 10, p_device_id: "dev-flx-" + sfx + "-xxxxxxxx" });
+ok(!fco.error && fco.data.flags.includes("impossible_travel"), "phát hiện di chuyển bất thường (HCM → HN trong vài giây)", fco.error ?? fco.data?.flags);
+ok(fco.data?.worked_minutes >= 0, "tính giờ làm khi ngoài lịch");
+const { data: susp } = await mgr.from("notifications").select("title").eq("type", "suspicious");
+ok(susp?.some((n) => n.title.includes("FLX" + sfx)), "quản lý nhận cảnh báo chấm công nghi vấn");
+
+// ---------------------------------------------------------------------------
 console.log("\n[4] Phân quyền dữ liệu (RLS)");
 const { data: a1 } = await emp2.from("attendance").select("id").eq("employee_id", empId);
 ok(a1?.length === 0, "nhân viên khác không xem được chấm công của nhau");
