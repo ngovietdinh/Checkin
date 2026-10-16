@@ -11,3 +11,4 @@ supabase/functions/.env
 test-results
 supabase/functions/.ca-test.pem
 deno.lock
+dist-teams

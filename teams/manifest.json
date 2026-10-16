@@ -1,0 +1,31 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "a912b04d-8736-4799-8b66-c4d1d2027fea",
+  "developer": {
+    "name": "Chấm công",
+    "websiteUrl": "https://checkin-opal-beta.vercel.app/",
+    "privacyUrl": "https://checkin-opal-beta.vercel.app/",
+    "termsOfUseUrl": "https://checkin-opal-beta.vercel.app/"
+  },
+  "name": { "short": "Chấm công", "full": "Chấm công & nhân sự" },
+  "description": {
+    "short": "Check-in/check-out bằng GPS + selfie, gửi đơn, báo cáo, xem phiếu lương.",
+    "full": "Ứng dụng chấm công nội bộ: check-in/check-out theo vị trí chi nhánh kèm ảnh selfie, gửi đơn nghỉ phép/đi muộn/quên chấm công, giao việc và báo cáo công việc hằng ngày, xem bảng công và phiếu lương."
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "accentColor": "#0F766E",
+  "staticTabs": [
+    {
+      "entityId": "chamcong",
+      "name": "Chấm công",
+      "contentUrl": "https://checkin-opal-beta.vercel.app/",
+      "websiteUrl": "https://checkin-opal-beta.vercel.app/",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": ["identity"],
+  "devicePermissions": ["geolocation", "media"],
+  "validDomains": ["checkin-opal-beta.vercel.app"]
+}
